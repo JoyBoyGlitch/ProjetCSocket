@@ -31,8 +31,8 @@ void sendClient(clientInfo *ci, char *msg);
 void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
-void acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab);
-void createClientThread();
+void* acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab);
+void createClientsThreads(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab);
  
 int main(void) {
     int fdsocket = createSocketServer();
@@ -42,9 +42,9 @@ int main(void) {
     clientInfo clientTab[CLIENTS_NB];
     initClientTab(clientTab);
 
-    
+    createClientsThreads(fdsocket, &clientAdresse, addrLen, &clientTab);
 
-    acceptClient(fdsocket, &clientAdresse, addrLen, &clientTab);
+    
     return EXIT_SUCCESS;
 }
  
@@ -162,7 +162,7 @@ void initClientInfo(clientInfo* ci){
     ci->socket = EMPTY_VALUE;
 }
 
-void acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab){
+void* acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab){
     int socket = 0;
     while ((socket = accept(fdsocket, (struct sockaddr *) &clientAdresse, &addrLen)) != -1) {
         printf("socket ok\n");
@@ -179,15 +179,22 @@ void acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int 
             break;
         }
     }
+    pthread_exit(NULL);
 }
 
-void createClientsThreads(){
-    for(int i=0;i<CLIENTS_NB;i++){
-        void *thread_1(void *arg) {
-            printf(i, "Nous sommes dans le thread.numéro : %d\n");
-            
-            // Ajouter accept ici
-            pthread_exit(EXIT_SUCCESS);
-            }
+void createClientsThreads(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab){
+    pthread_t threads[CLIENTS_NB];
+    int thread_ids[CLIENTS_NB];
+
+    for (int i = 0; i < CLIENTS_NB; i++) {
+        thread_ids[i] = i;
+        int result = pthread_create(&threads[i], NULL, acceptClient(fdsocket, &clientAdresse, addrLen, &clientTab), &thread_ids[i]);
+        if (result != 0) {
+            printf("Erreur lors de la création du thread %d.\n", i);
+        }
+    }
+
+    for (int i = 0; i < CLIENTS_NB; i++) {
+        pthread_join(threads[i], NULL);
     }
 }
