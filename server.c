@@ -6,6 +6,10 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+
+// Pour les threads
+#include <pthread.h>
+#include <semaphore.h>
  
 #define CMD_QUIT "quit"
 #define CMD_STOP "stop"
@@ -27,6 +31,8 @@ void sendClient(clientInfo *ci, char *msg);
 void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
+void acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab);
+void createClientThread();
  
 int main(void) {
     int fdsocket = createSocketServer();
@@ -35,21 +41,10 @@ int main(void) {
     unsigned int addrLen = sizeof(clientAdresse);
     clientInfo clientTab[CLIENTS_NB];
     initClientTab(clientTab);
-    int socket = 0;
-    while ((socket = accept(fdsocket, (struct sockaddr *) &clientAdresse, &addrLen)) != -1) {
-        clientInfo *ci = getNextFreeClient(clientTab);
-        //gerer le cas ou clientTab return NULL
-        if(ci == NULL){
-            send(socket,"On est complet mec \n",sizeof("On est complet mec \n"),MSG_DONTWAIT);
-            continue;
-        }
-        ci->socket = socket;
-        getClientInfo(ci, &clientAdresse);
-        if(manageClient(ci) != 0){
-            close(fdsocket);
-            break;
-        }
-    }
+
+    
+
+    acceptClient(fdsocket, &clientAdresse, addrLen, &clientTab);
     return EXIT_SUCCESS;
 }
  
@@ -165,4 +160,34 @@ void initClientInfo(clientInfo* ci){
     ci->port = EMPTY_VALUE;
     ci->ip[0] ='\0';
     ci->socket = EMPTY_VALUE;
+}
+
+void acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab){
+    int socket = 0;
+    while ((socket = accept(fdsocket, (struct sockaddr *) &clientAdresse, &addrLen)) != -1) {
+        printf("socket ok\n");
+        clientInfo *ci = getNextFreeClient(clientTab);
+        //gerer le cas ou clientTab return NULL
+        if(ci == NULL){
+            send(socket,"On est complet mec \n",sizeof("On est complet mec \n"),MSG_DONTWAIT);
+            continue;
+        }
+        ci->socket = socket;
+        getClientInfo(ci, &clientAdresse);
+        if(manageClient(ci) != 0){
+            close(fdsocket);
+            break;
+        }
+    }
+}
+
+void createClientsThreads(){
+    for(int i=0;i<CLIENTS_NB;i++){
+        void *thread_1(void *arg) {
+            printf(i, "Nous sommes dans le thread.numéro : %d\n");
+            
+            // Ajouter accept ici
+            pthread_exit(EXIT_SUCCESS);
+            }
+    }
 }
