@@ -104,6 +104,8 @@ int manageClient(clientInfo *ci){
     while(1){
         sendClient(ci, prompt);
         len = recv(ci->socket, buffer, BUFFER_LEN, SOCK_NONBLOCK);
+
+        // Si le buffer est de taille BUFFER_LEN et que le dernier caractère est retour a la ligne
         if(len == BUFFER_LEN && buffer[len-1] == '\n'){
             printf("%s",buffer);
             sendClient(ci, buffer);
@@ -116,10 +118,25 @@ int manageClient(clientInfo *ci){
             buffer[len] = '\0';
         }
         if(len == BUFFER_LEN){
+            
             printf("%s",buffer);
-            sendClient(ci, buffer);
+            sendClient(ci, strncat(buffer,"\0\n",2));
+            sendClient(ci, "\n");
+
+
             continue;
         }
+
+        /* //CODE QUI MARCHE UN PEU
+        if(len == BUFFER_LEN){
+            
+            printf("%s",buffer);
+            sendClient(ci, strncat(buffer,"\0\n",2));
+            sendClient(ci, "\n");
+
+
+            continue;
+        } */
         if(strlen(buffer) == 0){
             // message vide
             continue;
