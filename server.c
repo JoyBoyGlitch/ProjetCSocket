@@ -22,6 +22,9 @@ struct clientInfo{
     int port;
     char ip[INET_ADDRSTRLEN];
     int socket;
+    struct sockaddr_in *clientAdresse;
+    unsigned int addrLen;
+    int fdSocket;
 } typedef clientInfo;
  
 void getClientInfo(clientInfo *ci, struct sockaddr_in *ca);
@@ -31,9 +34,7 @@ void sendClient(clientInfo *ci, char *msg);
 void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
-void* acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab);
-void createClientsThreads(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab);
- 
+void* assyncWaitForClient(clientInfo* ci); 
 int main(void) {
     int fdsocket = createSocketServer();
     // Structure contenant l'adresse du client
@@ -41,12 +42,32 @@ int main(void) {
     unsigned int addrLen = sizeof(clientAdresse);
     clientInfo clientTab[CLIENTS_NB];
     initClientTab(clientTab);
+    int socket = 0;
+    while ((socket = accept(fdsocket, (struct sockaddr *) &clientAdresse, &addrLen)) != -1) {
+        clientInfo *ci = getNextFreeClient(clientTab);
+        //gerer le cas ou clientTab return NULL
+        if(ci == NULL){
+            send(socket,"On est complet mec \n",sizeof("On est complet mec \n"),MSG_DONTWAIT);
+            continue;
+        }
+        ci->clientAdresse = &clientAdresse;
+        ci->socket = socket;
+        ci->fdSocket = fdsocket;
 
-    createClientsThreads(fdsocket, &clientAdresse, addrLen, &clientTab);
+        pthread_t threadClient;
+        if(pthread_create(&threadClient, NULL, assyncWaitForClient, ci) != 0){
+            printf("Erreur à la creation du thread client");
+        }
+        
+    }
+   
+
+    //createClientsThreads(fdsocket, &clientAdresse, addrLen, &clientTab);
 
     
     return EXIT_SUCCESS;
 }
+
  
 int createSocketServer(){
     int fdsocket;
@@ -160,41 +181,14 @@ void initClientInfo(clientInfo* ci){
     ci->port = EMPTY_VALUE;
     ci->ip[0] ='\0';
     ci->socket = EMPTY_VALUE;
+    ci->fdSocket = EMPTY_VALUE;
+    ci->addrLen = sizeof(ci->clientAdresse);
 }
 
-void* acceptClient(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab){
-    int socket = 0;
-    while ((socket = accept(fdsocket, (struct sockaddr *) &clientAdresse, &addrLen)) != -1) {
-        printf("socket ok\n");
-        clientInfo *ci = getNextFreeClient(clientTab);
-        //gerer le cas ou clientTab return NULL
-        if(ci == NULL){
-            send(socket,"On est complet mec \n",sizeof("On est complet mec \n"),MSG_DONTWAIT);
-            continue;
-        }
-        ci->socket = socket;
-        getClientInfo(ci, &clientAdresse);
+void* assyncWaitForClient(clientInfo* ci){
+        getClientInfo(ci, ci->clientAdresse);
         if(manageClient(ci) != 0){
-            close(fdsocket);
-            break;
+            close(ci->fdSocket);
+            return NULL;
         }
-    }
-    pthread_exit(NULL);
-}
-
-void createClientsThreads(int fdsocket, struct sockaddr_in *clientAdresse, unsigned int addrLen, clientInfo *clientTab){
-    pthread_t threads[CLIENTS_NB];
-    int thread_ids[CLIENTS_NB];
-
-    for (int i = 0; i < CLIENTS_NB; i++) {
-        thread_ids[i] = i;
-        int result = pthread_create(&threads[i], NULL, acceptClient(fdsocket, &clientAdresse, addrLen, &clientTab), &thread_ids[i]);
-        if (result != 0) {
-            printf("Erreur lors de la création du thread %d.\n", i);
-        }
-    }
-
-    for (int i = 0; i < CLIENTS_NB; i++) {
-        pthread_join(threads[i], NULL);
-    }
 }
