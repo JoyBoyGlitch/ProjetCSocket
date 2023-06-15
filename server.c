@@ -242,12 +242,3 @@ void sig_handler(int sig) {
     close(fdsocket);
     end = 1;
 }
-// Gestionnaire de signaux
-void sig_handler(int sig) {
-    printf("\nSIGINT attrapé, on stop le programme %i\n", getpid());
-    for (int i=0; i<CLIENTS_NB; i++){
-        close (clientTab[i].socket);
-    }
-    close(fdsocket);
-    end = 1;
-}
