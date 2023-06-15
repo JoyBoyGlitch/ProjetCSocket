@@ -7,12 +7,15 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+//#include <time.h>
  
 #define CMD_QUIT "quit"
 #define CMD_STOP "stop"
 #define BUFFER_LEN 10
 #define CLIENTS_NB 2
 #define EMPTY_VALUE -1
+
+
 
 struct clientInfo{
     char pseudo[BUFFER_LEN];
@@ -28,6 +31,8 @@ void sendClient(clientInfo *ci, char *msg);
 void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
+char* buildLogMessage(char* pseudo, char* message);
+void writeToLog(char* logMessage);
  
 int main(void) {
     int fdsocket = createSocketServer();
@@ -104,8 +109,10 @@ int manageClient(clientInfo *ci){
     while(1){
         sendClient(ci, prompt);
         len = recv(ci->socket, buffer, BUFFER_LEN, SOCK_NONBLOCK);
+        char* logMessage = buildLogMessage(ci->pseudo, buffer);
         if(len == BUFFER_LEN && buffer[len-1] == '\n'){
             printf("%s",buffer);
+
             sendClient(ci, buffer);
             continue;
         }
@@ -139,6 +146,7 @@ int manageClient(clientInfo *ci){
         }
         sendClient(ci, buffer);
         printf("%s",buffer);
+        writeToLog(logMessage);
         sendClient(ci, "\n");
         printf("\n");
     }
@@ -166,4 +174,29 @@ void initClientInfo(clientInfo* ci){
     ci->port = EMPTY_VALUE;
     ci->ip[0] ='\0';
     ci->socket = EMPTY_VALUE;
+}
+
+
+char* buildLogMessage(char* pseudo, char* message){
+    char* logMessage;
+    
+
+    // on construit le message    
+    strcat(logMessage, pseudo);
+    strcat(logMessage, message);
+    strcat(logMessage, "\n");
+
+    return logMessage;
+}
+
+void writeToLog(char* logMessage){
+    FILE *fp;
+    fp = fopen ("log/logfile.json", "a");
+
+    // On écrit le message
+    for (int i = 0; logMessage[i] != '\n'; i++) {
+            /* write to file using fputc() function */
+            fputc(logMessage[i], fp);
+    }
+    fclose(fp);
 }
