@@ -7,6 +7,10 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+
+// Pour les threads
+#include <pthread.h>
+#include <semaphore.h>
  
 #define CMD_QUIT "quit"
 #define CMD_STOP "stop"
@@ -19,6 +23,9 @@ struct clientInfo{
     int port;
     char ip[INET_ADDRSTRLEN];
     int socket;
+    struct sockaddr_in *clientAdresse;
+    unsigned int addrLen;
+    int fdSocket;
 } typedef clientInfo;
  
 void getClientInfo(clientInfo *ci, struct sockaddr_in *ca);
@@ -28,7 +35,7 @@ void sendClient(clientInfo *ci, char *msg);
 void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
- 
+void* assyncWaitForClient(void* ci); 
 int main(void) {
     int fdsocket = createSocketServer();
     // Structure contenant l'adresse du client
@@ -44,15 +51,20 @@ int main(void) {
             send(socket,"On est complet mec \n",sizeof("On est complet mec \n"),MSG_DONTWAIT);
             continue;
         }
+        ci->clientAdresse = &clientAdresse;
         ci->socket = socket;
-        getClientInfo(ci, &clientAdresse);
-        if(manageClient(ci) != 0){
-            close(fdsocket);
-            break;
+        ci->fdSocket = fdsocket;
+
+        pthread_t threadClient;
+        if(pthread_create(&threadClient, NULL, assyncWaitForClient, ci) != 0){
+            printf("Erreur à la creation du thread client");
         }
+        
     }
+    
     return EXIT_SUCCESS;
 }
+
  
 int createSocketServer(){
     int fdsocket;
@@ -193,4 +205,15 @@ void initClientInfo(clientInfo* ci){
     ci->port = EMPTY_VALUE;
     ci->ip[0] ='\0';
     ci->socket = EMPTY_VALUE;
+    ci->fdSocket = EMPTY_VALUE;
+    ci->addrLen = sizeof(ci->clientAdresse);
+}
+
+void* assyncWaitForClient(void* arg){
+        clientInfo* ci = (clientInfo*) arg;
+        getClientInfo(ci, ci->clientAdresse);
+        if(manageClient(ci) != 0){
+            close(ci->fdSocket);
+            return NULL;
+        }
 }
