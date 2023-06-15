@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <sys/socket.h>
 #include <stdlib.h>
@@ -7,20 +6,21 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <unistd.h>
- 
+#include <signal.h>
+
 #define CMD_QUIT "quit"
 #define CMD_STOP "stop"
 #define BUFFER_LEN 10
 #define CLIENTS_NB 2
 #define EMPTY_VALUE -1
 
-struct clientInfo{
+struct clientInfo {
     char pseudo[BUFFER_LEN];
     int port;
     char ip[INET_ADDRSTRLEN];
     int socket;
 } typedef clientInfo;
- 
+
 void getClientInfo(clientInfo *ci, struct sockaddr_in *ca);
 int createSocketServer();
 int manageClient(clientInfo *ci);
@@ -28,18 +28,31 @@ void sendClient(clientInfo *ci, char *msg);
 void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
- 
+void sig_handler(int sig); // Gestionnaire de signaux
+
+int end = 0; // Indicateur de fin de programme (interrupt)
+int fdsocket; //utilisé dans le main
+clientInfo clientTab[CLIENTS_NB];
+
 int main(void) {
-    int fdsocket = createSocketServer();
+    puts("Utilisez le signal SIGINT pour interrompre l'exécution !");
+        // Enregistrement du gestionnaire de signaux        
+        if(signal(SIGINT, sig_handler) == SIG_ERR || signal(SIGUSR1, sig_handler) == SIG_ERR){
+                puts("Erreur à l'enregistrement du gestionnaire de signaux !");
+        }
+    fdsocket = createSocketServer();
     // Structure contenant l'adresse du client
     struct sockaddr_in clientAdresse;
     unsigned int addrLen = sizeof(clientAdresse);
-    clientInfo clientTab[CLIENTS_NB];
+   
     initClientTab(clientTab);
     int socket = 0;
     while ((socket = accept(fdsocket, (struct sockaddr *) &clientAdresse, &addrLen)) != -1) {
+        if (end == 1) {
+            break; //Sortir du while en cas d'interrupt
+        }
         clientInfo *ci = getNextFreeClient(clientTab);
-        //gerer le cas ou clientTab return NULL
+        // Gérer le cas où clientTab retourne NULL
         if(ci == NULL){
             send(socket,"On est complet mec \n",sizeof("On est complet mec \n"),MSG_DONTWAIT);
             continue;
@@ -81,7 +94,6 @@ int createSocketServer(){
     }
     return fdsocket;
 }
- 
 void getClientInfo(clientInfo *ci, struct sockaddr_in *ca){
     // Convertion de l'IP en texte
     inet_ntop(AF_INET, &(ca->sin_addr), ci->ip, sizeof(ci->ip));
@@ -90,10 +102,11 @@ void getClientInfo(clientInfo *ci, struct sockaddr_in *ca){
 }
  
 int manageClient(clientInfo *ci){
+    //signal(SIGINT, sig_handler); // Définition du gestionnaire de signaux pour SIGINT
     sendClient(ci, "Welcome on the coolest chat server ;)\n");
     char buffer[BUFFER_LEN+1]="";
     int len = 0;
-    sendClient(ci, "Blaze ? ");
+    sendClient(ci, "Ton pseudo ? ");
     recv(ci->socket,ci->pseudo, BUFFER_LEN, SOCK_NONBLOCK);
     ci->pseudo[strlen(ci->pseudo)-2]='\0';
     int lenPrompt = snprintf(0,0,"%s : \t",ci->pseudo);
@@ -104,6 +117,9 @@ int manageClient(clientInfo *ci){
     while(1){
         sendClient(ci, prompt);
         len = recv(ci->socket, buffer, BUFFER_LEN, SOCK_NONBLOCK);
+        if (end == 1) {
+            break;
+        }
         if(len == BUFFER_LEN && buffer[len-1] == '\n'){
             printf("%s",buffer);
             sendClient(ci, buffer);
@@ -166,4 +182,13 @@ void initClientInfo(clientInfo* ci){
     ci->port = EMPTY_VALUE;
     ci->ip[0] ='\0';
     ci->socket = EMPTY_VALUE;
+}
+// Gestionnaire de signaux
+void sig_handler(int sig) {
+    printf("\nSIGINT attrapé, on stop le programme %i\n", getpid());
+    for (int i=0; i<CLIENTS_NB; i++){
+        close (clientTab[i].socket);
+    }
+    close(fdsocket);
+    end = 1;
 }
