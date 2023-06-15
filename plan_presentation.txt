@@ -1,0 +1,6 @@
+1 - Introduction (Bonjour tout ça tout ça)
+2 - Présentation du Projet (Très général sur ce qu'on doit fournir)
+3 - Démonstration
+4 - Explication technique (Présentation des principales fonctions)
+5 - Bilan de l'expérience (Problèmes rencontrés, Solutions trouvées)
+6 - Conclusion
