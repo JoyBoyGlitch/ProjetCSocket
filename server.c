@@ -60,10 +60,6 @@ int main(void) {
         }
         
     }
-   
-
-    //createClientsThreads(fdsocket, &clientAdresse, addrLen, &clientTab);
-
     
     return EXIT_SUCCESS;
 }
