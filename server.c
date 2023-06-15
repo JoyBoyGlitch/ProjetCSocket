@@ -100,28 +100,55 @@ int manageClient(clientInfo *ci){
     char prompt[lenPrompt];
     sprintf(prompt,"%s : \t",ci->pseudo);
     //printf("%s",prompt);
-    //printf("%s",ci->pseudo);
+    //printf("%s",ci->pseudo);*
+
+    int bool = 0;
     while(1){
-        sendClient(ci, prompt);
+
+        if(bool == 0){
+            sendClient(ci, prompt);
+        }
+        bool = 0;
         len = recv(ci->socket, buffer, BUFFER_LEN, SOCK_NONBLOCK);
+
+        // Si le buffer est de taille BUFFER_LEN et que le dernier caractère est retour a la ligne
         if(len == BUFFER_LEN && buffer[len-1] == '\n'){
             printf("%s",buffer);
             sendClient(ci, buffer);
+            
             continue;
         }
+
         if(buffer[len-1] == '\n'){
         // fin du message, nettoyage du \n si besoin
             buffer[len-2] = '\0';
         }else {
             buffer[len] = '\0';
         }
+
         if(len == BUFFER_LEN){
+            
             printf("%s",buffer);
-            sendClient(ci, buffer);
+            sendClient(ci, strncat(buffer,"\0\n",2));
+            sendClient(ci, "\n");
+            bool = 1;
+
             continue;
-        }
+        }  
+
+        /* //CODE QUI MARCHE UN PEU
+        if(len == BUFFER_LEN){
+            
+            printf("%s",buffer);
+            sendClient(ci, strncat(buffer,"\0\n",2));
+            sendClient(ci, "\n");
+
+
+            continue;
+        }       */
         if(strlen(buffer) == 0){
             // message vide
+            
             continue;
         }
         // Vérification d'un commande
