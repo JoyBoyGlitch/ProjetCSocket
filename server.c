@@ -34,7 +34,7 @@ void sendClient(clientInfo *ci, char *msg);
 void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
-void* assyncWaitForClient(clientInfo* ci); 
+void* assyncWaitForClient(void* ci); 
 int main(void) {
     int fdsocket = createSocketServer();
     // Structure contenant l'adresse du client
@@ -181,7 +181,8 @@ void initClientInfo(clientInfo* ci){
     ci->addrLen = sizeof(ci->clientAdresse);
 }
 
-void* assyncWaitForClient(clientInfo* ci){
+void* assyncWaitForClient(void* arg){
+        clientInfo* ci = (clientInfo*) arg;
         getClientInfo(ci, ci->clientAdresse);
         if(manageClient(ci) != 0){
             close(ci->fdSocket);
