@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <sys/socket.h>
 #include <stdlib.h>
@@ -7,20 +6,28 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <unistd.h>
- 
+#include <signal.h>
+
+// Pour les threads
+#include <pthread.h>
+#include <semaphore.h>
+
 #define CMD_QUIT "quit"
 #define CMD_STOP "stop"
 #define BUFFER_LEN 10
 #define CLIENTS_NB 2
 #define EMPTY_VALUE -1
 
-struct clientInfo{
+struct clientInfo {
     char pseudo[BUFFER_LEN];
     int port;
     char ip[INET_ADDRSTRLEN];
     int socket;
+    struct sockaddr_in *clientAdresse;
+    unsigned int addrLen;
+    int fdSocket;
 } typedef clientInfo;
- 
+
 void getClientInfo(clientInfo *ci, struct sockaddr_in *ca);
 int createSocketServer();
 int manageClient(clientInfo *ci);
@@ -28,31 +35,49 @@ void sendClient(clientInfo *ci, char *msg);
 void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
- 
+void sig_handler(int sig); // Gestionnaire de signaux
+
+int end = 0; // Indicateur de fin de programme (interrupt)
+int fdsocket; //utilisé dans le main
+clientInfo clientTab[CLIENTS_NB];
+void* assyncWaitForClient(void* ci);
 int main(void) {
-    int fdsocket = createSocketServer();
+    puts("Utilisez le signal SIGINT pour interrompre l'exécution !");
+        // Enregistrement du gestionnaire de signaux        
+        if(signal(SIGINT, sig_handler) == SIG_ERR || signal(SIGUSR1, sig_handler) == SIG_ERR){
+                puts("Erreur à l'enregistrement du gestionnaire de signaux !");
+        }
+    fdsocket = createSocketServer();
     // Structure contenant l'adresse du client
     struct sockaddr_in clientAdresse;
     unsigned int addrLen = sizeof(clientAdresse);
-    clientInfo clientTab[CLIENTS_NB];
+   
     initClientTab(clientTab);
     int socket = 0;
     while ((socket = accept(fdsocket, (struct sockaddr *) &clientAdresse, &addrLen)) != -1) {
+        if (end == 1) {
+            break; //Sortir du while en cas d'interrupt
+        }
         clientInfo *ci = getNextFreeClient(clientTab);
-        //gerer le cas ou clientTab return NULL
+        // Gérer le cas où clientTab retourne NULL
         if(ci == NULL){
             send(socket,"On est complet mec \n",sizeof("On est complet mec \n"),MSG_DONTWAIT);
             continue;
         }
+        ci->clientAdresse = &clientAdresse;
         ci->socket = socket;
-        getClientInfo(ci, &clientAdresse);
-        if(manageClient(ci) != 0){
-            close(fdsocket);
-            break;
+        ci->fdSocket = fdsocket;
+
+        pthread_t threadClient;
+        if(pthread_create(&threadClient, NULL, assyncWaitForClient, ci) != 0){
+            printf("Erreur à la creation du thread client");
         }
+        
     }
+    
     return EXIT_SUCCESS;
 }
+
  
 int createSocketServer(){
     int fdsocket;
@@ -81,7 +106,6 @@ int createSocketServer(){
     }
     return fdsocket;
 }
- 
 void getClientInfo(clientInfo *ci, struct sockaddr_in *ca){
     // Convertion de l'IP en texte
     inet_ntop(AF_INET, &(ca->sin_addr), ci->ip, sizeof(ci->ip));
@@ -90,38 +114,69 @@ void getClientInfo(clientInfo *ci, struct sockaddr_in *ca){
 }
  
 int manageClient(clientInfo *ci){
+    //signal(SIGINT, sig_handler); // Définition du gestionnaire de signaux pour SIGINT
     sendClient(ci, "Welcome on the coolest chat server ;)\n");
     char buffer[BUFFER_LEN+1]="";
     int len = 0;
-    sendClient(ci, "Blaze ? ");
+    sendClient(ci, "Ton pseudo ? ");
     recv(ci->socket,ci->pseudo, BUFFER_LEN, SOCK_NONBLOCK);
     ci->pseudo[strlen(ci->pseudo)-2]='\0';
     int lenPrompt = snprintf(0,0,"%s : \t",ci->pseudo);
     char prompt[lenPrompt];
     sprintf(prompt,"%s : \t",ci->pseudo);
     //printf("%s",prompt);
-    //printf("%s",ci->pseudo);
+    //printf("%s",ci->pseudo);*
+
+    int bool = 0;
     while(1){
-        sendClient(ci, prompt);
+
+        if(bool == 0){
+            sendClient(ci, prompt);
+        }
+        bool = 0;
         len = recv(ci->socket, buffer, BUFFER_LEN, SOCK_NONBLOCK);
+        if (end == 1) {
+            break;
+        }
+
+        // Si le buffer est de taille BUFFER_LEN et que le dernier caractère est retour a la ligne
         if(len == BUFFER_LEN && buffer[len-1] == '\n'){
             printf("%s",buffer);
             sendClient(ci, buffer);
+            
             continue;
         }
+
         if(buffer[len-1] == '\n'){
         // fin du message, nettoyage du \n si besoin
             buffer[len-2] = '\0';
         }else {
             buffer[len] = '\0';
         }
+
         if(len == BUFFER_LEN){
+            
             printf("%s",buffer);
-            sendClient(ci, buffer);
+            sendClient(ci, strncat(buffer,"\0\n",2));
+            sendClient(ci, "\n");
+            bool = 1;
+
             continue;
-        }
+        }  
+
+        /* //CODE QUI MARCHE UN PEU
+        if(len == BUFFER_LEN){
+            
+            printf("%s",buffer);
+            sendClient(ci, strncat(buffer,"\0\n",2));
+            sendClient(ci, "\n");
+
+
+            continue;
+        }       */
         if(strlen(buffer) == 0){
             // message vide
+            
             continue;
         }
         // Vérification d'un commande
@@ -166,4 +221,24 @@ void initClientInfo(clientInfo* ci){
     ci->port = EMPTY_VALUE;
     ci->ip[0] ='\0';
     ci->socket = EMPTY_VALUE;
+    ci->fdSocket = EMPTY_VALUE;
+    ci->addrLen = sizeof(ci->clientAdresse);
+}
+
+void* assyncWaitForClient(void* arg){
+        clientInfo* ci = (clientInfo*) arg;
+        getClientInfo(ci, ci->clientAdresse);
+        if(manageClient(ci) != 0){
+            close(ci->fdSocket);
+            return NULL;
+        }
+}
+// Gestionnaire de signaux
+void sig_handler(int sig) {
+    printf("\nSIGINT attrapé, on stop le programme %i\n", getpid());
+    for (int i=0; i<CLIENTS_NB; i++){
+        close (clientTab[i].socket);
+    }
+    close(fdsocket);
+    end = 1;
 }
