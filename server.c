@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-//#include <time.h>
+#include <time.h>
  
 #define CMD_QUIT "quit"
 #define CMD_STOP "stop"
@@ -32,7 +32,7 @@ void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
 char* buildLogMessage(char* pseudo, char* message);
-void writeToLog(char* logMessage);
+void writeToLog(char* pseudo, char* message);
  
 int main(void) {
     int fdsocket = createSocketServer();
@@ -109,7 +109,7 @@ int manageClient(clientInfo *ci){
     while(1){
         sendClient(ci, prompt);
         len = recv(ci->socket, buffer, BUFFER_LEN, SOCK_NONBLOCK);
-        char* logMessage = buildLogMessage(ci->pseudo, buffer);
+        //char* logMessage = buildLogMessage(ci->pseudo, buffer);
         if(len == BUFFER_LEN && buffer[len-1] == '\n'){
             printf("%s",buffer);
 
@@ -146,7 +146,7 @@ int manageClient(clientInfo *ci){
         }
         sendClient(ci, buffer);
         printf("%s",buffer);
-        writeToLog(logMessage);
+        writeToLog(ci->pseudo, buffer);
         sendClient(ci, "\n");
         printf("\n");
     }
@@ -176,27 +176,42 @@ void initClientInfo(clientInfo* ci){
     ci->socket = EMPTY_VALUE;
 }
 
+/*int getTimeStamp(char buffer, int bufferSize,char * option){
+   time_t rawtime;
+   struct tm *timeinfo;
+   char timeStamp[bufferSize];
+   time(&rawtime);
+   timeinfo = localtime(&rawtime);
+
+
+   if (strncmp(option, "log", 3) == 0) {
+      strftime(timeStamp, 80, "%h %d %H:%M:%S", timeinfo);
+   } else if (strncmp(option, "hour", 4) == 0) {
+      strftime(timeStamp, 80, "%H:%M:%S", timeinfo);
+   } else if (strncmp(option, "day", 3) == 0) {
+      strftime(timeStamp, 80, "%Y-%m-%d", timeinfo);
+   } else if (strncmp(option, "dayhour", 7) == 0) {
+      strftime(timeStamp, 80, "%Y-%m-%d %H:%M:%S", timeinfo);
+   } 
+   else {
+      printf("Wrong option argument : %s\n", strerror(errno));
+      return EXIT_FAILURE;
+   }
+
+   strcpy(buffer, timeStamp);
+   return EXIT_SUCCESS;
+}*/
 
 char* buildLogMessage(char* pseudo, char* message){
-    char* logMessage;
-    
+    // char* date[10];
 
-    // on construit le message    
-    strcat(logMessage, pseudo);
-    strcat(logMessage, message);
-    strcat(logMessage, "\n");
-
-    return logMessage;
+    return strcat(strcat(strcat(pseudo," : "),message), "\n");
 }
 
-void writeToLog(char* logMessage){
+void writeToLog(char* pseudo, char* message){
     FILE *fp;
     fp = fopen ("log/logfile.json", "a");
 
-    // On écrit le message
-    for (int i = 0; logMessage[i] != '\n'; i++) {
-            /* write to file using fputc() function */
-            fputc(logMessage[i], fp);
-    }
+    int writenfile = fputs(buildLogMessage(pseudo, message),fp);
     fclose(fp);
 }
