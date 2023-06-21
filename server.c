@@ -36,7 +36,8 @@ void initClientTab(clientInfo ci[]);
 clientInfo * getNextFreeClient(clientInfo ci[]);
 void initClientInfo(clientInfo* ci);
 void sig_handler(int sig); // Gestionnaire de signaux
-
+void sendAllClients(clientInfo ci[], char *msg);
+void sendToAllExcept(char *msg, clientInfo *ci);
 int end = 0; // Indicateur de fin de programme (interrupt)
 int fdsocket; //utilisé dans le main
 clientInfo clientTab[CLIENTS_NB];
@@ -123,17 +124,18 @@ int manageClient(clientInfo *ci){
     ci->pseudo[strlen(ci->pseudo)-2]='\0';
     int lenPrompt = snprintf(0,0,"%s : \t",ci->pseudo);
     char prompt[lenPrompt];
-    sprintf(prompt,"%s : \t",ci->pseudo);
+    //sprintf(prompt,"%s : \t",ci->pseudo);
     //printf("%s",prompt);
     //printf("%s",ci->pseudo);*
 
     int bool = 0;
     while(1){
 
-        if(bool == 0){
-            sendClient(ci, prompt);
+        if(bool == 0){ //tout premier envoi
+           
+           bool = 1;
         }
-        bool = 0;
+      
         len = recv(ci->socket, buffer, BUFFER_LEN, SOCK_NONBLOCK);
         if (end == 1) {
             break;
@@ -141,7 +143,10 @@ int manageClient(clientInfo *ci){
 
         // Si le buffer est de taille BUFFER_LEN et que le dernier caractère est retour a la ligne
         if(len == BUFFER_LEN && buffer[len-1] == '\n'){
+            sendToAllExcept(ci->pseudo,ci);
+            sendToAllExcept(" : ",ci);
             printf("%s",buffer);
+            sendToAllExcept(strncat(buffer,"\0\n",2),ci);
             sendClient(ci, buffer);
             
             continue;
@@ -156,24 +161,17 @@ int manageClient(clientInfo *ci){
 
         if(len == BUFFER_LEN){
             
+            sendToAllExcept(ci->pseudo,ci);
+            sendToAllExcept(" : ",ci);
+            printf("%s","Moi : ")
             printf("%s",buffer);
-            sendClient(ci, strncat(buffer,"\0\n",2));
-            sendClient(ci, "\n");
+            sendToAllExcept(strcat(buffer,"\0\n"),ci);
+            sendToAllExcept("\n",ci);
+    
             bool = 1;
 
             continue;
         }  
-
-        /* //CODE QUI MARCHE UN PEU
-        if(len == BUFFER_LEN){
-            
-            printf("%s",buffer);
-            sendClient(ci, strncat(buffer,"\0\n",2));
-            sendClient(ci, "\n");
-
-
-            continue;
-        }       */
         if(strlen(buffer) == 0){
             // message vide
             
@@ -192,9 +190,11 @@ int manageClient(clientInfo *ci){
             initClientInfo(ci);
             return 1;
         }
+        
         sendClient(ci, buffer);
+        sendToAllExcept(buffer,ci);
         printf("%s",buffer);
-        sendClient(ci, "\n");
+        sendToAllExcept( "\n",ci);
         printf("\n");
     }
 }
@@ -241,4 +241,20 @@ void sig_handler(int sig) {
     }
     close(fdsocket);
     end = 1;
+}
+
+void sendToAll(char *msg){
+    for(int i = 0; i<CLIENTS_NB;i++){
+        if(clientTab[i].port != EMPTY_VALUE){
+            sendClient(&clientTab[i], msg);
+        }
+    }
+}
+
+void sendToAllExcept(char *msg, clientInfo *ci){
+    for(int i = 0; i<CLIENTS_NB;i++){
+        if(clientTab[i].port != EMPTY_VALUE && clientTab[i].port != ci->port){
+            sendClient(&clientTab[i], msg);
+        }
+    }
 }
